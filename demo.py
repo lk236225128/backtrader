@@ -21,7 +21,7 @@ class TestStrategy(bt.Strategy):
         # Keep a reference to the "close" line in the data[0] dataseries
         self.dataclose = self.datas[0].close
         self.bt_sma = bt.indicators.MovingAverageSimple(self.dataclose)
-        self.buy_sell_signal = bt.indicators.CrossOver(self.dataclose, self.bt_sma)
+        # self.buy_sell_signal = bt.indicators.CrossOver(self.dataclose, self.bt_sma)
 
     def start(self):
         print("the start call me!")
@@ -34,14 +34,16 @@ class TestStrategy(bt.Strategy):
 
     def next(self):
         print("next call me!")
-
-        if not self.position and self.buy_sell_signal[0] == 1:
-            self.order=self.close()
+        if self.dataclose[0] > self.bt_sma[0]:
             self.order = self.buy()
 
-        if not self.position and self.buy_sell_signal[0] == -1:
-            self.order = self.close()
-            self.order = self.sell()
+        # if not self.position and self.buy_sell_signal[0] == 1:
+        #     self.order=self.close()
+        #     self.order = self.buy()
+        #
+        # if not self.position and self.buy_sell_signal[0] == -1:
+        #     self.order = self.close()
+        #     self.order = self.sell()
 
 
 if __name__ == '__main__':

@@ -104,7 +104,11 @@ class TestStrategy(bt.Strategy):
         # 传入self.dataclose[0]
         VAR1 = (self.df['high'] + self.df['low'] + self.df['open'] + 2 * self.df['close']) / 5
 
+        # print(f'VAR1:\n{VAR1}')
         VAR2 = self.tdx.REF(VAR1, 1)
+        # print(f'VAR2:\n{VAR2}')
+        print(f'self.tdx.MAX(VAR1 - VAR2, 0):\n{self.tdx.MAX(VAR1 - VAR2, 0)}')
+        print(f'self.tdx.SMA(self.tdx.MAX(VAR1 - VAR2, 0), 10, 1):\n{self.tdx.SMA(self.tdx.MAX(VAR1 - VAR2, 0), 10, 1)}')
 
         VAR8 = self.tdx.SMA(self.tdx.MAX(VAR1 - VAR2, 0), 10, 1) / self.tdx.SMA(self.tdx.ABS(VAR1 - VAR2), 10, 1) * 100
 
