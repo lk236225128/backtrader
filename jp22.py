@@ -10,6 +10,7 @@ import backtrader as bt
 import tushare as ts
 import pandas as pd
 import numpy as np
+from MyTT import *
 from pandas.api.indexers import FixedForwardWindowIndexer
 
 
@@ -44,8 +45,6 @@ class TestStrategy(bt.Strategy):
             'volume': self.datas[0].volume.array
         }
         self.df = pd.DataFrame(df_dict)
-
-        self.tdx = TDXIndex()
 
         print(f'__init__ '
               f' \ndataclose:{list(self.dataclose)} ,'
@@ -101,27 +100,26 @@ class TestStrategy(bt.Strategy):
                  (trade.pnl, trade.pnlcomm), doprint=True)
 
     def get_var9(self, value):
-        # 传入self.dataclose[0]
         VAR1 = (self.df['high'] + self.df['low'] + self.df['open'] + 2 * self.df['close']) / 5
 
         # print(f'VAR1:\n{VAR1}')
-        VAR2 = self.tdx.REF(VAR1, 1)
+        VAR2 = REF(VAR1, 1)
         # print(f'VAR2:\n{VAR2}')
-        print(f'self.tdx.MAX(VAR1 - VAR2, 0):\n{self.tdx.MAX(VAR1 - VAR2, 0)}')
-        print(f'self.tdx.SMA(self.tdx.MAX(VAR1 - VAR2, 0), 10, 1):\n{self.tdx.SMA(self.tdx.MAX(VAR1 - VAR2, 0), 10, 1)}')
+        print(f'MAX(VAR1 - VAR2, 0):\n{MAX(VAR1 - VAR2, 0)}')
+        print(f'SMA(MAX(VAR1 - VAR2, 0), 10, 1):\n{SMA(MAX(VAR1 - VAR2, 0), 10, 1)}')
 
-        VAR8 = self.tdx.SMA(self.tdx.MAX(VAR1 - VAR2, 0), 10, 1) / self.tdx.SMA(self.tdx.ABS(VAR1 - VAR2), 10, 1) * 100
+        VAR8 = SMA(MAX(VAR1 - VAR2, 0), 10, 1) / SMA(ABS(VAR1 - VAR2), 10, 1) * 100
 
-        condition1 = self.tdx.COUNT(VAR8 < 20, 5) >= 1
-        condition2 = self.tdx.COUNT(VAR1 == self.tdx.LLV(VAR1, 10), 10) >= 1
+        condition1 = COUNT(VAR8 < 20, 5) >= 1
+        condition2 = COUNT(VAR1 == LLV(VAR1, 10), 10) >= 1
         condition3 = self.df['close'] >= self.df['open'] * 1.038
-        condition4 = self.df['volume'] > self.tdx.MA(self.df['volume'], 5) * 1.2
+        condition4 = self.df['volume'] > MA(self.df['volume'], 5) * 1.2
 
         self.df["JJ9"] = condition1.astype('int64') + condition2.astype('int64') + condition3.astype(
             'int64') + condition4.astype('int64')
 
-        self.df["max30"] = self.tdx.HHV(self.df['high'], 30)
-        self.df["min30"] = self.tdx.LLV(self.df['low'], 30)
+        self.df["max30"] = HHV(self.df['high'], 30)
+        self.df["min30"] = LLV(self.df['low'], 30)
 
         # print(f'df : {self.df}')
         b_value = self.df.loc[self.df['datetime'] == value, 'JJ9'].iloc[0]
@@ -158,95 +156,6 @@ class TestStrategy(bt.Strategy):
     def stop(self):
         self.log('(MA Period %2d) Ending Value %.2f' %
                  (self.params.maperiod, self.broker.getvalue()), doprint=True)
-
-
-class TDXIndex():
-
-    def HHV(self, Series, N):
-        return pd.Series(Series).rolling(N).max()
-
-    def back_HHV(self, Series, N):
-        return Series.rolling(FixedForwardWindowIndexer(window_size=N)).max()
-
-    def back_LLV(self, Series, N):
-        return Series.rolling(FixedForwardWindowIndexer(window_size=N)).min()
-
-    def LLV(self, Series, N):
-        return pd.Series(Series).rolling(N).min()
-
-    def SMA(self, Series, N, M=1):
-        ret = []
-        i = 1
-        length = len(Series)
-        # 跳过X中前面几个 nan 值
-        while i < length:
-            if np.isnan(Series.iloc[i]):
-                i += 1
-            else:
-                break
-        preY = Series.iloc[i]  # Y'
-        ret.append(preY)
-        while i < length:
-            Y = (M * Series.iloc[i] + (N - M) * preY) / float(N)
-            ret.append(Y)
-            preY = Y
-            i += 1
-        return pd.Series(ret, index=Series.tail(len(ret)).index)
-
-    def EMA2(self, Series, N):
-        return pd.Series.ewm(Series, span=N, min_periods=N - 1, adjust=True).mean()
-
-    def EMA(self, Series, N):
-        var = pd.Series.ewm(Series, span=N, min_periods=N - 1, adjust=True).mean()
-        if N > 0:
-            var[0] = 0
-            # y=0
-            a = 2.00000000 / (N + 1)
-            for i in range(1, N):
-                y = pd.Series.ewm(Series, span=i, min_periods=i - 1, adjust=True).mean()
-                y1 = a * Series[i] + (1 - a) * y[i - 1]
-                var[i] = y1
-        return var
-
-    def MA(self, Series, N):
-        return pd.Series.rolling(Series, N).mean()
-
-    def REF(self, Series, N, sign=0):
-        # sign=1表示保留数据,并延长序列
-        if sign == 1:
-            for i in range(N):
-                Series = Series.append(pd.Series([0], index=[len(Series) + 1]))
-        return Series.shift(N)
-
-    def IF(self, COND, V1, V2):
-        var = np.where(COND, V1, V2)
-        return pd.Series(var, index=COND.index)
-
-    def COUNT(self, COND, N):
-        return pd.Series(np.where(COND, 1, 0), index=COND.index).rolling(N).sum()
-
-    def MAX(self, A, B):
-        var = self.IF(A > B, A, B)
-        return pd.Series(var, name='maxs')
-
-    def MIN(self, A, B):
-        var = self.IF(A < B, A, B)
-        return var
-
-    def ABS(self, Series):
-        return abs(Series)
-
-    def CROSS(self, A, B):
-        A2 = np.array(A)
-        var = np.where(A2 < B, 1, 0)
-        # dd=(pd.Series(var, index=A.index).diff()<0).apply(int)
-        return (pd.Series(var).diff() < 0).apply(int)
-
-    def SINGLE_CROSS(self, A, B):
-        if A.iloc[-2] < B.iloc[-2] and A.iloc[-1] > B.iloc[-1]:
-            return True
-        else:
-            return False
 
 
 if __name__ == '__main__':
@@ -287,4 +196,3 @@ if __name__ == '__main__':
 
     # Run over everything
     cerebro.run(maxcpus=1)
-

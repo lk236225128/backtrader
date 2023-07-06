@@ -39,13 +39,6 @@ class TestStrategy(bt.Strategy):
         # Add a MovingAverageSimple indicator
         self.sma = bt.indicators.SimpleMovingAverage(
             self.datas[0], period=self.params.maperiod)
-        self.var1 = (self.datas[0].high + self.datas[0].low + self.datas[0].open + 2 * self.datas[0].close) / 5
-        self.log(f'self.var1:\n{self.var1}')
-        self.var2 = self.var1(-1)
-        self.log(f'self.var2:\n{self.var1(-1)}')
-
-        self.max_value2 = abs(self.var1 - self.var2)
-        self.log(f'abs(self.var1 - self.var2):\n{self.max_value2}')
 
         # self.var8 = bt.indicators.SMA(self.max_value, period=10) / bt.indicators.SMA(self.max_value2, period=10) * 100
 
@@ -101,17 +94,6 @@ class TestStrategy(bt.Strategy):
         # Simply log the closing price of the series from the reference
         self.log('==================================================')
         self.log('Close, %.2f' % self.dataclose[0])
-        self.log(f'self.var1:{self.var1[0]}')
-        self.log(f'self.var2:{self.var2[0]}')
-
-        self.max_value = self.var1[0] - self.var2[0]
-        self.log(f'self.max_value:{self.max_value}')
-        self.log(f'abs(self.max_value):{abs(self.max_value)}')
-        numbers = self.data.lines.close.get(ago=0, size=10)
-        self.log(f'numbers:{numbers}')
-
-        self.var8 = bt.indicators.SMA(numbers, period=10)
-        self.log(f'self.var8:{self.var8}')
 
         # Check if an order is pending ... if yes, we cannot send a 2nd one
         if self.order:

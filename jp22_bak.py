@@ -7,29 +7,52 @@ import sys  # To find out the script name (in argv[0])
 
 # Import the backtrader platform
 import backtrader as bt
-# import tushare as ts
+import tushare as ts
 import pandas as pd
 import numpy as np
 from pandas.api.indexers import FixedForwardWindowIndexer
-
-from hb_hq_api import *  # 数字货币行情库
-from MyTT import *
 
 
 # Create a Stratey
 class TestStrategy(bt.Strategy):
     params = (
         ('maperiod', 15),
+        ('printlog', False),
     )
 
-    def log(self, txt, dt=None):
+    def log(self, txt, dt=None, doprint=False):
         ''' Logging function fot this strategy'''
-        dt = dt or self.datas[0].datetime.date(0)
-        print('%s, %s' % (dt.isoformat(), txt))
+        if self.params.printlog or doprint:
+            dt = dt or self.datas[0].datetime.date(0)
+            print('%s, %s' % (dt.isoformat(), txt))
 
     def __init__(self):
         # Keep a reference to the "close" line in the data[0] dataseries
         self.dataclose = self.datas[0].close
+        self.dataopen = self.datas[0].open
+        self.datahigh = self.datas[0].high
+        self.datalow = self.datas[0].low
+        self.datavolume = self.datas[0].volume
+        self.datadate = self.datas[0].datetime
+
+        df_dict = {
+            'datetime': self.datas[0].datetime.array,
+            'open': self.datas[0].open.array,
+            'high': self.datas[0].high.array,
+            'low': self.datas[0].low.array,
+            'close': self.datas[0].close.array,
+            'volume': self.datas[0].volume.array
+        }
+        self.df = pd.DataFrame(df_dict)
+
+        self.tdx = TDXIndex()
+
+        print(f'__init__ '
+              f' \ndataclose:{list(self.dataclose)} ,'
+              f' \ndataopen:{list(self.dataopen)} ,'
+              f' \ndatahigh:{list(self.datahigh)} ,'
+              f' \ndatalow:{list(self.datalow)},'
+              f' \ndatavolume :{list(self.datavolume)}')
 
         # To keep track of pending orders and buy price/commission
         self.order = None
@@ -37,27 +60,7 @@ class TestStrategy(bt.Strategy):
         self.buycomm = None
 
         # Add a MovingAverageSimple indicator
-        self.sma = bt.indicators.SimpleMovingAverage(
-            self.datas[0], period=self.params.maperiod)
-        self.var1 = (self.datas[0].high + self.datas[0].low + self.datas[0].open + 2 * self.datas[0].close) / 5
-        self.log(f'self.var1:\n{self.var1}')
-        self.var2 = self.var1(-1)
-        self.log(f'self.var2:\n{self.var1(-1)}')
-
-        self.max_value2 = abs(self.var1 - self.var2)
-        self.log(f'abs(self.var1 - self.var2):\n{self.max_value2}')
-
-        # self.var8 = bt.indicators.SMA(self.max_value, period=10) / bt.indicators.SMA(self.max_value2, period=10) * 100
-
-        # Indicators for the plotting show
-        bt.indicators.ExponentialMovingAverage(self.datas[0], period=25)
-        bt.indicators.WeightedMovingAverage(self.datas[0], period=25,
-                                            subplot=True)
-        bt.indicators.StochasticSlow(self.datas[0], plot=False)
-        bt.indicators.MACDHisto(self.datas[0], plot=False)
-        rsi = bt.indicators.RSI(self.datas[0], plot=False)
-        bt.indicators.SmoothedMovingAverage(rsi, period=10, plot=False)
-        bt.indicators.ATR(self.datas[0], plot=False)
+        self.sma = bt.indicators.SimpleMovingAverage(self.datas[0], period=self.params.maperiod)
 
     def notify_order(self, order):
         if order.status in [order.Submitted, order.Accepted]:
@@ -72,7 +75,7 @@ class TestStrategy(bt.Strategy):
                     'BUY EXECUTED, Price: %.2f, Cost: %.2f, Comm %.2f' %
                     (order.executed.price,
                      order.executed.value,
-                     order.executed.comm))
+                     order.executed.comm), doprint=True)
 
                 self.buyprice = order.executed.price
                 self.buycomm = order.executed.comm
@@ -80,7 +83,7 @@ class TestStrategy(bt.Strategy):
                 self.log('SELL EXECUTED, Price: %.2f, Cost: %.2f, Comm %.2f' %
                          (order.executed.price,
                           order.executed.value,
-                          order.executed.comm))
+                          order.executed.comm), doprint=True)
 
             self.bar_executed = len(self)
 
@@ -95,23 +98,41 @@ class TestStrategy(bt.Strategy):
             return
 
         self.log('OPERATION PROFIT, GROSS %.2f, NET %.2f' %
-                 (trade.pnl, trade.pnlcomm))
+                 (trade.pnl, trade.pnlcomm), doprint=True)
+
+    def get_var9(self, value):
+        # 传入self.dataclose[0]
+        VAR1 = (self.df['high'] + self.df['low'] + self.df['open'] + 2 * self.df['close']) / 5
+
+        # print(f'VAR1:\n{VAR1}')
+        VAR2 = self.tdx.REF(VAR1, 1)
+        # print(f'VAR2:\n{VAR2}')
+        print(f'self.tdx.MAX(VAR1 - VAR2, 0):\n{self.tdx.MAX(VAR1 - VAR2, 0)}')
+        print(
+            f'self.tdx.SMA(self.tdx.MAX(VAR1 - VAR2, 0), 10, 1):\n{self.tdx.SMA(self.tdx.MAX(VAR1 - VAR2, 0), 10, 1)}')
+
+        VAR8 = self.tdx.SMA(self.tdx.MAX(VAR1 - VAR2, 0), 10, 1) / self.tdx.SMA(self.tdx.ABS(VAR1 - VAR2), 10, 1) * 100
+
+        condition1 = self.tdx.COUNT(VAR8 < 20, 5) >= 1
+        condition2 = self.tdx.COUNT(VAR1 == self.tdx.LLV(VAR1, 10), 10) >= 1
+        condition3 = self.df['close'] >= self.df['open'] * 1.038
+        condition4 = self.df['volume'] > self.tdx.MA(self.df['volume'], 5) * 1.2
+
+        self.df["JJ9"] = condition1.astype('int64') + condition2.astype('int64') + condition3.astype(
+            'int64') + condition4.astype('int64')
+
+        self.df["max30"] = self.tdx.HHV(self.df['high'], 30)
+        self.df["min30"] = self.tdx.LLV(self.df['low'], 30)
+
+        # print(f'df : {self.df}')
+        b_value = self.df.loc[self.df['datetime'] == value, 'JJ9'].iloc[0]
+        if b_value >= 4:
+            print(f'{value} : b_value:{b_value}')
+        return b_value
 
     def next(self):
         # Simply log the closing price of the series from the reference
-        self.log('==================================================')
         self.log('Close, %.2f' % self.dataclose[0])
-        self.log(f'self.var1:{self.var1[0]}')
-        self.log(f'self.var2:{self.var2[0]}')
-
-        self.max_value = self.var1[0] - self.var2[0]
-        self.log(f'self.max_value:{self.max_value}')
-        self.log(f'abs(self.max_value):{abs(self.max_value)}')
-        numbers = self.data.lines.close.get(ago=0, size=10)
-        self.log(f'numbers:{numbers}')
-
-        self.var8 = bt.indicators.SMA(numbers, period=10)
-        self.log(f'self.var8:{self.var8}')
 
         # Check if an order is pending ... if yes, we cannot send a 2nd one
         if self.order:
@@ -119,23 +140,25 @@ class TestStrategy(bt.Strategy):
 
         # Check if we are in the market
         if not self.position:
-
-            # Not yet ... we MIGHT BUY if ...
-            if self.dataclose[0] > self.sma[0]:
-                # BUY, BUY, BUY!!! (with all possible default parameters)
-                self.log('BUY CREATE, %.2f' % self.dataclose[0])
+            if self.get_var9(self.datadate[0]) >= 4:
+                # BUY, BUY, BUY!!!
+                self.log('BUY CREATE, %.2f' % self.dataclose[0], doprint=True)
 
                 # Keep track of the created order to avoid a 2nd order
                 self.order = self.buy()
 
         else:
-
-            if self.dataclose[0] < self.sma[0]:
+            # Already in the market ... we might sell
+            if len(self) >= (self.bar_executed + 5):
                 # SELL, SELL, SELL!!! (with all possible default parameters)
                 self.log('SELL CREATE, %.2f' % self.dataclose[0])
 
                 # Keep track of the created order to avoid a 2nd order
                 self.order = self.sell()
+
+    def stop(self):
+        self.log('(MA Period %2d) Ending Value %.2f' %
+                 (self.params.maperiod, self.broker.getvalue()), doprint=True)
 
 
 class TDXIndex():
@@ -198,7 +221,6 @@ class TDXIndex():
 
     def IF(self, COND, V1, V2):
         var = np.where(COND, V1, V2)
-        # return pd.Series(var, index=COND.index)
         return pd.Series(var, index=COND.index)
 
     def COUNT(self, COND, N):
@@ -235,20 +257,22 @@ if __name__ == '__main__':
     # Add a strategy
     cerebro.addstrategy(TestStrategy)
 
-    # Datas are in a subfolder of the samples. Need to find where the script is
-    # because it could have been called from anywhere
-    modpath = os.path.dirname(os.path.abspath(sys.argv[0]))
-    datapath = os.path.join(modpath, 'datas/orcl-1995-2014.txt')
 
-    # Create a Data Feed
-    data = bt.feeds.YahooFinanceCSVData(
-        dataname=datapath,
-        # Do not pass values before this date
-        fromdate=datetime.datetime(2000, 1, 1),
-        # Do not pass values before this date
-        todate=datetime.datetime(2000, 12, 31),
-        # Do not pass values after this date
-        reverse=False)
+    # Create a Data Feed, 使用tushare旧版接口获取数据
+    def get_data(code, start='2023-03-31', end='2023-06-24'):
+        df = ts.get_hist_data(code, ktype='D', start=start, end=end)
+        df['openinterest'] = 0
+        df = df[['open', 'high', 'low', 'close', 'volume', 'openinterest']]
+        df.index = pd.to_datetime(df.index)  # 将索引转换为datetime类型
+        df = df.sort_index()  # 按索引排序
+        print(f'df:{df}')
+        return df
+
+
+    dataframe = get_data('000568')  # 合盛硅业
+
+    # 加载数据
+    data = bt.feeds.PandasData(dataname=dataframe)
 
     # Add the Data Feed to Cerebro
     cerebro.adddata(data)
@@ -262,14 +286,5 @@ if __name__ == '__main__':
     # Set the commission
     cerebro.broker.setcommission(commission=0.0)
 
-    # Print out the starting conditions
-    print('Starting Portfolio Value: %.2f' % cerebro.broker.getvalue())
-
     # Run over everything
-    cerebro.run()
-
-    # Print out the final result
-    print('Final Portfolio Value: %.2f' % cerebro.broker.getvalue())
-
-    # Plot the result
-    # cerebro.plot(style='candle')
+    cerebro.run(maxcpus=1)
