@@ -46,12 +46,12 @@ class TestStrategy(bt.Strategy):
         }
         self.df = pd.DataFrame(df_dict)
 
-        print(f'__init__ '
-              f' \ndataclose:{list(self.dataclose)} ,'
-              f' \ndataopen:{list(self.dataopen)} ,'
-              f' \ndatahigh:{list(self.datahigh)} ,'
-              f' \ndatalow:{list(self.datalow)},'
-              f' \ndatavolume :{list(self.datavolume)}')
+        # print(f'__init__ '
+        #       f' \ndataclose:{list(self.dataclose)} ,'
+        #       f' \ndataopen:{list(self.dataopen)} ,'
+        #       f' \ndatahigh:{list(self.datahigh)} ,'
+        #       f' \ndatalow:{list(self.datalow)},'
+        #       f' \ndatavolume :{list(self.datavolume)}')
 
         # To keep track of pending orders and buy price/commission
         self.order = None
@@ -102,13 +102,13 @@ class TestStrategy(bt.Strategy):
     def get_var9(self, value):
         VAR1 = (self.df['high'] + self.df['low'] + self.df['open'] + 2 * self.df['close']) / 5
 
-        # print(f'VAR1:\n{VAR1}')
         VAR2 = REF(VAR1, 1)
+
+        # print(f'VAR1:\n{VAR1}')
         # print(f'VAR2:\n{VAR2}')
-        print(f'MAX(VAR1 - VAR2, 0):\n{MAX(VAR1 - VAR2, 0)}')
-        print(f'SMA(MAX(VAR1 - VAR2, 0), 10, 1):\n{SMA(MAX(VAR1 - VAR2, 0), 10, 1)}')
 
         VAR8 = SMA(MAX(VAR1 - VAR2, 0), 10, 1) / SMA(ABS(VAR1 - VAR2), 10, 1) * 100
+        self.log(f'VAR8:{VAR8}')
 
         condition1 = COUNT(VAR8 < 20, 5) >= 1
         condition2 = COUNT(VAR1 == LLV(VAR1, 10), 10) >= 1
@@ -117,9 +117,7 @@ class TestStrategy(bt.Strategy):
 
         self.df["JJ9"] = condition1.astype('int64') + condition2.astype('int64') + condition3.astype(
             'int64') + condition4.astype('int64')
-
-        self.df["max30"] = HHV(self.df['high'], 30)
-        self.df["min30"] = LLV(self.df['low'], 30)
+        # print(f'JJ9:{self.df}')
 
         # print(f'df : {self.df}')
         b_value = self.df.loc[self.df['datetime'] == value, 'JJ9'].iloc[0]
@@ -138,6 +136,7 @@ class TestStrategy(bt.Strategy):
         # Check if we are in the market
         if not self.position:
             if self.get_var9(self.datadate[0]) >= 4:
+                # print(f'self.datas:{self.datas[0].JJ9}')
                 # BUY, BUY, BUY!!!
                 self.log('BUY CREATE, %.2f' % self.dataclose[0], doprint=True)
 
@@ -153,12 +152,13 @@ class TestStrategy(bt.Strategy):
                 # Keep track of the created order to avoid a 2nd order
                 self.order = self.sell()
 
-    def stop(self):
-        self.log('(MA Period %2d) Ending Value %.2f' %
-                 (self.params.maperiod, self.broker.getvalue()), doprint=True)
-
 
 if __name__ == '__main__':
+    # 设置显示选项以显示完整的数据内容
+    pd.set_option('display.max_rows', None)  # 显示所有行
+    pd.set_option('display.max_columns', None)  # 显示所有列
+    pd.set_option('display.width', None)  # 自动调整输出宽度
+
     # Create a cerebro entity
     cerebro = bt.Cerebro()
 
@@ -170,10 +170,25 @@ if __name__ == '__main__':
     def get_data(code, start='2023-03-31', end='2023-06-24'):
         df = ts.get_hist_data(code, ktype='D', start=start, end=end)
         df['openinterest'] = 0
+        df = df.sort_index()  # 按索引排序
+
+        # 新增字段
+        VAR1 = (df['high'] + df['low'] + df['open'] + 2 * df['close']) / 5
+        VAR2 = REF(VAR1, 1)
+        VAR8 = SMA(MAX(VAR1 - VAR2, 0), 10, 1) / SMA(ABS(VAR1 - VAR2), 10, 1) * 100
+
+        condition1 = COUNT(VAR8 < 20, 5) >= 1
+        condition2 = COUNT(VAR1 == LLV(VAR1, 10), 10) >= 1
+        condition3 = df['close'] >= df['open'] * 1.038
+        condition4 = df['volume'] > MA(df['volume'], 5) * 1.2
+
+        df["JJ9"] = condition1.astype('int64') + condition2.astype('int64') + condition3.astype(
+            'int64') + condition4.astype('int64')
+        print(f'==df:{df}')
         df = df[['open', 'high', 'low', 'close', 'volume', 'openinterest']]
         df.index = pd.to_datetime(df.index)  # 将索引转换为datetime类型
-        df = df.sort_index()  # 按索引排序
-        print(f'df:{df}')
+        # df = df.sort_index()  # 按索引排序
+        # print(f'df:{df}')
         return df
 
 

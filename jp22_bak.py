@@ -103,15 +103,16 @@ class TestStrategy(bt.Strategy):
     def get_var9(self, value):
         # 传入self.dataclose[0]
         VAR1 = (self.df['high'] + self.df['low'] + self.df['open'] + 2 * self.df['close']) / 5
+        print(f'===VAR1:{VAR1}')
 
         # print(f'VAR1:\n{VAR1}')
         VAR2 = self.tdx.REF(VAR1, 1)
         # print(f'VAR2:\n{VAR2}')
-        print(f'self.tdx.MAX(VAR1 - VAR2, 0):\n{self.tdx.MAX(VAR1 - VAR2, 0)}')
-        print(
-            f'self.tdx.SMA(self.tdx.MAX(VAR1 - VAR2, 0), 10, 1):\n{self.tdx.SMA(self.tdx.MAX(VAR1 - VAR2, 0), 10, 1)}')
+        # print(f'self.tdx.MAX(VAR1 - VAR2, 0):\n{self.tdx.MAX(VAR1 - VAR2, 0)}')
+        # print(f'self.tdx.SMA(self.tdx.MAX(VAR1 - VAR2, 0), 10, 1):\n{self.tdx.SMA(self.tdx.MAX(VAR1 - VAR2, 0), 10, 1)}')
 
         VAR8 = self.tdx.SMA(self.tdx.MAX(VAR1 - VAR2, 0), 10, 1) / self.tdx.SMA(self.tdx.ABS(VAR1 - VAR2), 10, 1) * 100
+        print(f'===VAR8:{VAR8}')
 
         condition1 = self.tdx.COUNT(VAR8 < 20, 5) >= 1
         condition2 = self.tdx.COUNT(VAR1 == self.tdx.LLV(VAR1, 10), 10) >= 1
@@ -156,9 +157,9 @@ class TestStrategy(bt.Strategy):
                 # Keep track of the created order to avoid a 2nd order
                 self.order = self.sell()
 
-    def stop(self):
-        self.log('(MA Period %2d) Ending Value %.2f' %
-                 (self.params.maperiod, self.broker.getvalue()), doprint=True)
+    # def stop(self):
+    #     self.log('(MA Period %2d) Ending Value %.2f' %
+    #              (self.params.maperiod, self.broker.getvalue()), doprint=True)
 
 
 class TDXIndex():
@@ -261,11 +262,12 @@ if __name__ == '__main__':
     # Create a Data Feed, 使用tushare旧版接口获取数据
     def get_data(code, start='2023-03-31', end='2023-06-24'):
         df = ts.get_hist_data(code, ktype='D', start=start, end=end)
+        print(f'ddddf:{df}')
         df['openinterest'] = 0
         df = df[['open', 'high', 'low', 'close', 'volume', 'openinterest']]
         df.index = pd.to_datetime(df.index)  # 将索引转换为datetime类型
         df = df.sort_index()  # 按索引排序
-        print(f'df:{df}')
+        # print(f'df:{df}')
         return df
 
 
