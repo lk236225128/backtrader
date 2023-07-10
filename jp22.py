@@ -1,17 +1,10 @@
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
-
-import datetime  # For datetime objects
-import os.path  # To manage paths
-import sys  # To find out the script name (in argv[0])
-
+from __future__ import (absolute_import, division, print_function, unicode_literals)
 # Import the backtrader platform
 import backtrader as bt
 import tushare as ts
 import pandas as pd
 import numpy as np
 from MyTT import *
-from pandas.api.indexers import FixedForwardWindowIndexer
 
 
 # Create a Stratey
@@ -90,25 +83,22 @@ class TestStrategy(bt.Strategy):
         if self.order:
             return
 
-        # Check if we are in the market
-        if not self.position:
-            if self.data0.lines.JJ9[0] >= 4 \
-                    or self.data0.lines.JJ6[0] >= 4 \
-                    or (self.data0.lines.ZJDC[-1] >= 100 and self.data0.lines.ZJDC[0] < 100):
-                self.log(
-                    f'BUY CREATE: {self.dataclose[0]} , '
-                    f'JJ9: {self.data0.lines.JJ9[0]} , '
-                    f'JJ6: {self.data0.lines.JJ6[0]} , '
-                    f'ZJDC : {self.data0.lines.ZJDC[-1]} -> {self.data0.lines.ZJDC[0]}',
-                    doprint=True)
+        if self.data0.lines.JJ9[0] >= 4 \
+                or self.data0.lines.JJ6[0] >= 4 \
+                or (self.data0.lines.ZJDC[-1] >= 100 and self.data0.lines.ZJDC[0] < 100):
+            self.log(
+                f'BUY CREATE: {self.dataclose[0]} , '
+                f'JJ9: 【{self.data0.lines.JJ9[0]} 】, '
+                f'JJ6:【 {self.data0.lines.JJ6[0]}】 , '
+                f'ZJDC : {self.data0.lines.ZJDC[-1]} -> {self.data0.lines.ZJDC[0]}',
+                doprint=True)
+            # self.order = self.close()
+            self.order = self.buy()  # Keep track of the created order to avoid a 2nd order
 
-                self.order = self.buy()  # Keep track of the created order to avoid a 2nd order
-        else:
-            # Already in the market ... we might sell
-            if len(self) >= (self.bar_executed + 5):
-                # SELL, SELL, SELL!!! (with all possible default parameters)
-                self.log('SELL CREATE, %.2f' % self.dataclose[0])
-                self.order = self.sell()
+        if self.data0.lines.sell_v1[0] == True:
+            self.log('SELL CREATE, %.2f' % self.dataclose[0])
+            # self.order = self.close()
+            self.order = self.sell()
 
 
 class MyIndicators:
@@ -170,14 +160,30 @@ class MyIndicators:
 
         return df
 
+    def add_sell_v1(self, df):
+        VAR1 = (df['high'] + df['low'] + df['open'] + 2 * df['close']) / 5
+        VAR2 = REF(VAR1, 1)
+        VAR3 = SMA((df['close'] - VAR2), 6, 1) / SMA(ABS(df['close'] - VAR2), 6, 1) * 100
+        VAR7 = SMA(MAX(df['close'] - REF(df['close'], 1), 0), 6, 1) / \
+               SMA(ABS(df['close'] - REF(df['close'], 1)), 6, 1) * 100;
+
+        vv1 = REF(VAR3, 1) > 81
+        vv2 = VAR3 < 80
+        vv3 = CROSS(82, VAR7)
+
+        df['sell_v1'] = vv1 & vv2 | vv3
+
+        return df
+
 
 class PandasData_more(bt.feeds.PandasData):
-    lines = ('JJ9', 'JJ6', 'ZJDC')  # 要添加的线
+    lines = ('JJ9', 'JJ6', 'ZJDC', 'sell_v1')  # 要添加的线
     # 设置 line 在数据源上的列位置
     params = (
         ('JJ6', -1),
         ('JJ9', -1),  # -1表示自动按列明匹配数据，也可以设置为线在数据源中列的位置索引 (('pe',6),('pb',7),)
         ('ZJDC', -1),
+        ('sell_v1', -1)
     )
 
 
@@ -197,7 +203,7 @@ if __name__ == '__main__':
 
 
     # Create a Data Feed, 使用tushare旧版接口获取数据
-    def get_data(code, start='2022-11-01', end='2023-07-07'):
+    def get_data(code, start='2022-01-01', end='2023-07-07'):
         df = ts.get_hist_data(code, ktype='D', start=start, end=end)
         df['openinterest'] = 0
         df = df.sort_index()  # 按索引排序
@@ -205,20 +211,16 @@ if __name__ == '__main__':
         df = mi.add_JJ9(df)
         df = mi.add_JJ6(df)
         df = mi.add_ZJDC(df)
+        df = mi.add_sell_v1(df)
         print(f'df:{df}')
         return df
 
 
-    dataframe = get_data('601012')  # 合盛硅业
+    dataframe = get_data('603260')  # 合盛硅业
 
     # 新定义的PandasData_more（继承自bt.feeds.PandasData）
     data = PandasData_more(dataname=dataframe)
     cerebro.adddata(data)
-
-    # 加载数据
-    # data = bt.feeds.PandasData(dataname=dataframe)
-    # Add the Data Feed to Cerebro
-    # cerebro.adddata(data)
 
     # Set our desired cash start
     cerebro.broker.setcash(100000.0)
@@ -233,4 +235,4 @@ if __name__ == '__main__':
     cerebro.run(maxcpus=1)
 
     # Plot the result
-    # cerebro.plot(style='candle')
+    cerebro.plot(style='candle')
