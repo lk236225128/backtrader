@@ -1,10 +1,9 @@
 from __future__ import (absolute_import, division, print_function, unicode_literals)
 # Import the backtrader platform
 import backtrader as bt
-import tushare as ts
-import pandas as pd
-import numpy as np
 from MyTT import *
+import tushare as ts
+import qstock as qs
 
 
 # Create a Stratey
@@ -203,8 +202,9 @@ if __name__ == '__main__':
 
 
     # Create a Data Feed, 使用tushare旧版接口获取数据
-    def get_data(code, start='2022-01-01', end='2023-07-07'):
-        df = ts.get_hist_data(code, ktype='D', start=start, end=end)
+    def get_data(code, start='20220101', end='20230707'):
+        # df = ts.get_hist_data(code, ktype='D', start=start, end=end)
+        df = qs.get_data(code, freq='d', start=start, end=end)
         df['openinterest'] = 0
         df = df.sort_index()  # 按索引排序
         df.index = pd.to_datetime(df.index)  # 将索引转换为datetime类型
@@ -231,8 +231,12 @@ if __name__ == '__main__':
     # Set the commission
     cerebro.broker.setcommission(commission=0.0)
 
+    print('Starting Portfolio Value: %.2f' % cerebro.broker.getvalue())
+
     # Run over everything
     cerebro.run(maxcpus=1)
+
+    print('Final Portfolio Value: %.2f' % cerebro.broker.getvalue())
 
     # Plot the result
     cerebro.plot(style='candle')
