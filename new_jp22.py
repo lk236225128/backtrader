@@ -12,6 +12,8 @@ class TestStrategy(bt.Strategy):
         ('maperiod', 15),
         ('printlog', False),
         ('profit_percent', 0.03),  # 设定盈利百分比
+        ('profit_percent', 0.03),  # 盈利百分比
+        ('stop_loss_percent', 0.05)  # 止损百分比
     )
 
     def log(self, txt, dt=None, doprint=False):
@@ -34,8 +36,13 @@ class TestStrategy(bt.Strategy):
         self.buyprice = None
         self.buycomm = None
 
+        self.sma5 = bt.indicators.SimpleMovingAverage(self.data, period=5)  # 5日均线指标
+        self.macd = bt.indicators.MACD(self.data)  # MACD指标
+
         # Add a MovingAverageSimple indicator
         self.sma = bt.indicators.SimpleMovingAverage(self.datas[0], period=self.params.maperiod, plot=False)
+
+        self.orders = []  # 存储所有订单信息
 
     def notify_order(self, order):
         if order.status in [order.Submitted, order.Accepted]:
@@ -47,18 +54,25 @@ class TestStrategy(bt.Strategy):
         if order.status in [order.Completed]:
             if order.isbuy():
                 self.log(
-                    'BUY EXECUTED, Price: %.2f, Cost: %.2f, Comm %.2f' %
-                    (order.executed.price,
-                     order.executed.value,
-                     order.executed.comm), doprint=True)
+                    f'Buy Order ID: {order.ref}, '
+                    f'Price: {order.executed.price}, '
+                    f'Cost: {order.executed.value}, '
+                    f'MACD {self.macd[0]} ,'
+                    f'SMA: {self.sma5[0]} ',
+                    doprint=True)
 
                 self.buyprice = order.executed.price
                 self.buycomm = order.executed.comm
-            # else:  # Sell
-            #     self.log('SELL EXECUTED, Price: %.2f, Cost: %.2f, Comm %.2f' %
-            #              (order.executed.price,
-            #               order.executed.value,
-            #               order.executed.comm), doprint=True)
+
+                self.orders.append(order)
+            else:  # Sell
+                self.log(
+                    f'Sell Order ID: {order.ref}, '
+                    f'Price: {order.executed.price}, '
+                    f'Cost: {order.executed.value}, '
+                    f'MACD {self.macd[0]} , '
+                    f'SMA: {self.sma5[0]}',
+                    doprint=True)
 
             self.bar_executed = len(self)
 
@@ -71,13 +85,12 @@ class TestStrategy(bt.Strategy):
     def notify_trade(self, trade):
         if not trade.isclosed:
             return
-
-        self.log('OPERATION PROFIT, GROSS %.2f, NET %.2f' %
+        self.log('收益, GROSS %.2f, NET %.2f' %
                  (trade.pnl, trade.pnlcomm), doprint=True)
 
     def next(self):
         # Simply log the closing price of the series from the reference
-        self.log('Close, %.2f' % self.dataclose[0])
+        self.log(f'Close,{self.dataclose[0]}')
 
         # Check if an order is pending ... if yes, we cannot send a 2nd one
         if self.order:
@@ -99,13 +112,10 @@ class TestStrategy(bt.Strategy):
             current_price = self.data.close[0]
             target_price = self.position.price * (1 + self.params.profit_percent)
             if current_price >= target_price:  # 达到设定的盈利百分比
-                self.log('SELL CREATE, %.2f' % self.dataclose[0],doprint=True)
+                self.log('百分之三止盈 deal SELL CREATE, %.2f , 买入价 %.2f , 目标价 %.2f' % (
+                    self.dataclose[0], self.position.price, target_price),
+                         doprint=True)
                 self.order = self.sell()
-
-        # if self.data0.lines.sell_v1[0] == True:
-        #     self.log('sell_v1 SELL CREATE, %.2f' % self.dataclose[0])
-        #     # self.order = self.close()
-        #     self.order = self.sell()
 
 
 class MyIndicators:
@@ -210,7 +220,7 @@ if __name__ == '__main__':
 
 
     # Create a Data Feed, 使用tushare旧版接口获取数据
-    def get_data(code, start='20230101', end='20230728'):
+    def get_data(code, start='20230501', end='20230730'):
         # df = ts.get_hist_data(code, ktype='D', start=start, end=end)
         df = qs.get_data(code, freq='5', start=start, end=end)
         df['openinterest'] = 0
@@ -224,7 +234,7 @@ if __name__ == '__main__':
         return df
 
 
-    dataframe = get_data('603260')  # 合盛硅业
+    dataframe = get_data('002371')  # 合盛硅业
 
     # 新定义的PandasData_more（继承自bt.feeds.PandasData）
     data = PandasData_more(dataname=dataframe)
